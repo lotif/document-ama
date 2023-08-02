@@ -238,10 +238,10 @@ def set_qa_prompt():
 def build_retrieval_qa(llm, prompt, vectordb):
     dbqa = RetrievalQA.from_chain_type(
         llm=llm,
-        chain_type='stuff',
+        chain_type="stuff",
         retriever=vectordb.as_retriever(search_kwargs={"k": CONFIG["VECTOR_COUNT"]}),
         return_source_documents=CONFIG["RETURN_SOURCE_DOCUMENTS"],
-        chain_type_kwargs={'prompt': prompt}
+        chain_type_kwargs={"prompt": prompt}
     )
     return dbqa
 
