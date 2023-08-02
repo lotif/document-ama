@@ -2,4 +2,6 @@
 /models
 /venv
 /.git
+/.idea
 /.gitignore
+/reference_image.png
