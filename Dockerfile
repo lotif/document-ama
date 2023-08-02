@@ -1,4 +1,4 @@
-FROM python:3.10-buster
+FROM python:3.9-bookworm
 
 # copy the content to the target container
 COPY . app
