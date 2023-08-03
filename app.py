@@ -45,18 +45,42 @@ Only return the helpful answer below and nothing else.
 Helpful answer:
 """
 
-LLM = None
 
-
-def main(llm):
-    st.header("Document AMA")
-
+@st.cache_resource(show_spinner=False)
+def init_resources():
     init_folders()
-
     error = download_model_if_necessary()
     if error is not None:
         st.error(error)
-        return
+        return None
+
+    resources = {}
+
+    with st.spinner("Initializing models..."):
+        print("Initializing models")
+        # Local CTransformers model
+        resources["llm"] = CTransformers(
+            model=CONFIG["MODEL_BIN_PATH"],
+            model_type=CONFIG["MODEL_TYPE"],
+            config={
+                'max_new_tokens': CONFIG["MAX_NEW_TOKENS"],
+                'temperature': CONFIG["TEMPERATURE"],
+            },
+        )
+        resources["text_splitter"] = RecursiveCharacterTextSplitter(
+            chunk_size=CONFIG["CHUNK_SIZE"],
+            chunk_overlap=CONFIG["CHUNK_OVERLAP"],
+        )
+        resources["embeddings_model"] = HuggingFaceEmbeddings(
+            model_name=CONFIG["EMBEDDINGS_MODEL"],
+            model_kwargs={"device": "cpu"},
+        )
+
+    return resources
+
+
+def main(resources):
+    st.header("Document AMA")
 
     uploaded_file = st.file_uploader("Upload a .pdf or .txt document")
 
@@ -64,7 +88,7 @@ def main(llm):
         return
 
     with st.spinner("Processing file..."):
-        faiss_path, error = process_file(uploaded_file)
+        faiss_path, error = process_file(uploaded_file, resources["text_splitter"], resources["embeddings_model"])
 
         if faiss_path is None and error is not None:
             if type(error) == Exception:
@@ -72,10 +96,6 @@ def main(llm):
             else:
                 st.error(error)
             return
-
-    with st.spinner("Initializing model..."):
-        if llm is None:
-            llm = build_llm()
 
     with st.form(key="question_form"):
         question = st.text_input("Ask your question:")
@@ -89,10 +109,15 @@ def main(llm):
             return
 
         with st.spinner("Retrieving answer..."):
+            print("Started retrieving answer...")
             start = datetime.datetime.now()
-            dbqa = setup_dbqa(faiss_path, llm)
+
+            dbqa = setup_dbqa(faiss_path, resources["llm"], resources["embeddings_model"])
             response = dbqa({"query": question})
+
             end = datetime.datetime.now()
+            delta = (end - start)
+            print(f"Answer retrieved in {delta.seconds}s")
 
         if response is None or type(response) is not dict or "result" not in response:
             st.error(f"Response is invalid: {response}")
@@ -105,11 +130,13 @@ def main(llm):
         """, unsafe_allow_html=True)
 
         for document in response["source_documents"]:
-            st.write(f"**Page {document.metadata.get('page', 'N/A')}:**")
+            page = "N/A"
+            if "page" in document.metadata:
+                page = str(document.metadata["page"] + 1)
+            st.write(f"**Page {page}:**")
             st.write(document.page_content)
             st.divider()
 
-        delta = (end - start)
         st.write(f"Response retrieved in {delta.seconds}s")
         st.markdown(
             f"Q&A Model: {CONFIG['MODEL_BIN_PATH']}" +
@@ -156,7 +183,7 @@ def download_model_if_necessary():
                     )
 
 
-def process_file(uploaded_file):
+def process_file(uploaded_file, text_splitter, embeddings_model):
     try:
         extension = os.path.splitext(uploaded_file.name)[-1].lower()
         if extension != ".pdf" and extension != ".txt":
@@ -183,21 +210,12 @@ def process_file(uploaded_file):
             loader = DirectoryLoader(data_path, glob='*.txt', loader_cls=TextLoader)
 
         documents = loader.load()
-        text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=CONFIG["CHUNK_SIZE"],
-            chunk_overlap=CONFIG["CHUNK_OVERLAP"],
-        )
         texts = text_splitter.split_documents(documents)
 
         if len(texts) == 0:
             raise Exception("Could not extract text from file.")
 
-        embeddings = HuggingFaceEmbeddings(
-            model_name=CONFIG["EMBEDDINGS_MODEL"],
-            model_kwargs={"device": "cpu"},
-        )
-
-        vectorstore = FAISS.from_documents(texts, embeddings)
+        vectorstore = FAISS.from_documents(texts, embeddings_model)
         vectorstore.save_local(faiss_path)
 
         return faiss_path, None
@@ -208,20 +226,6 @@ def process_file(uploaded_file):
 
         print(traceback.format_exc())
         return None, e
-
-
-def build_llm():
-    # Local CTransformers model
-    llm = CTransformers(
-        model=CONFIG["MODEL_BIN_PATH"],
-        model_type=CONFIG["MODEL_TYPE"],
-        config={
-            'max_new_tokens': CONFIG["MAX_NEW_TOKENS"],
-            'temperature': CONFIG["TEMPERATURE"],
-        },
-    )
-
-    return llm
 
 
 def set_qa_prompt():
@@ -246,16 +250,12 @@ def build_retrieval_qa(llm, prompt, vectordb):
     return dbqa
 
 
-def setup_dbqa(faiss_path, llm):
-    embeddings = HuggingFaceEmbeddings(
-        model_name="sentence-transformers/all-MiniLM-L6-v2",
-        model_kwargs={"device": "cpu"},
-    )
-    vectordb = FAISS.load_local(faiss_path, embeddings)
+def setup_dbqa(faiss_path, llm, embeddings_model):
+    vectordb = FAISS.load_local(faiss_path, embeddings_model)
     qa_prompt = set_qa_prompt()
     dbqa = build_retrieval_qa(llm, qa_prompt, vectordb)
 
     return dbqa
 
 
-main(LLM)
+main(init_resources())
