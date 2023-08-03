@@ -22,7 +22,7 @@ docker run -d -p 8501:8501 --name document-ama document-ama:latest
 
 Open the Streamlit app in your browser:
 ```shell
-http://localhost:8502/
+http://localhost:8501/
 ```
 
 ### Local env
