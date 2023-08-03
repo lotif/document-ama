@@ -51,7 +51,7 @@ A new browser window will pop up with the streamlit app.
 for the original code architecture)
 
 It is currently set up to run with the [8-bit quantized version of Llama2 that runs on GGML](https://huggingface.co/TheBloke/Llama-2-7B-Chat-GGML/blob/main/llama-2-7b-chat.ggmlv3.q8_0.bin)
-and [sentence-transformers/all-MiniLM-L6-v2](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2)
+as the Q&A model and [sentence-transformers/all-MiniLM-L6-v2](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2)
 as the embeddings model. If those models are not present (e.g. in the first run), it will first download them.
 
 Then, it will ask for a file to be uploaded. It needs to be either a `.txt` file or a `.pdf` file with selectable
