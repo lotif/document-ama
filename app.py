@@ -79,7 +79,7 @@ def init_resources():
             model_name=CONFIG["EMBEDDINGS_MODEL"],
             model_kwargs={"device": "cpu"},
         )
-        logger.info("Done.")
+        logger.info("Done initializing models.")
 
     return resources
 
@@ -175,7 +175,7 @@ def download_model_if_necessary():
         if not model_path in MODEL_URLS:
             return f"Model {model_path} is not loaded and does not have a URL assigned."
 
-        logger.info("downloading model...")
+        logger.info("Downloading model...")
 
         st.write("Downloading the model. This might take a while, do not close or refresh the window.")
         progress_bar = st.progress(0.0, text="Starting download...")
@@ -200,7 +200,7 @@ def download_model_if_necessary():
                         text=f"{percent:.1f}% ({format_progress_data(downloaded)}/{format_progress_data(total_length)})"
                     )
 
-        logger.info("Done.")
+        logger.info("Done downloading model.")
 
 
 def process_file(uploaded_file, text_splitter, embeddings_model):
@@ -240,7 +240,7 @@ def process_file(uploaded_file, text_splitter, embeddings_model):
         vectorstore = FAISS.from_documents(texts, embeddings_model)
         vectorstore.save_local(faiss_path)
 
-        logger.info("Done.")
+        logger.info("Done processing file.")
 
         return faiss_path, None
 
