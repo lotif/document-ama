@@ -1,8 +1,10 @@
 import datetime
 import hashlib
+import logging
 import os
 import requests
 import shutil
+import sys
 import traceback
 
 from langchain import PromptTemplate
@@ -14,6 +16,14 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.vectorstores import FAISS
 import streamlit as st
 
+
+logging.basicConfig(
+    format="%(asctime)s %(levelname)-8s %(message)s",
+    stream=sys.stdout,
+    level=logging.INFO,
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger(__name__)
 
 CONFIG = {
     "RETURN_SOURCE_DOCUMENTS": True,
@@ -48,16 +58,10 @@ Helpful answer:
 
 @st.cache_resource(show_spinner=False)
 def init_resources():
-    init_folders()
-    error = download_model_if_necessary()
-    if error is not None:
-        st.error(error)
-        return None
-
     resources = {}
 
     with st.spinner("Initializing models..."):
-        print("Initializing models")
+        logger.info("Initializing models...")
         # Local CTransformers model
         resources["llm"] = CTransformers(
             model=CONFIG["MODEL_BIN_PATH"],
@@ -75,11 +79,21 @@ def init_resources():
             model_name=CONFIG["EMBEDDINGS_MODEL"],
             model_kwargs={"device": "cpu"},
         )
+        logger.info("Done initializing models.")
 
     return resources
 
 
-def main(resources):
+def main():
+    init_folders()
+    error = download_model_if_necessary()
+    if error is not None:
+        st.error(error)
+        logger.error(error)
+        return None
+
+    resources = init_resources()
+
     st.header("Document AMA")
 
     uploaded_file = st.file_uploader("Upload a .pdf or .txt document")
@@ -93,8 +107,10 @@ def main(resources):
         if faiss_path is None and error is not None:
             if type(error) == Exception:
                 st.exception(error)
+                logger.exception(error)
             else:
                 st.error(error)
+                logger.error(error)
             return
 
     with st.form(key="question_form"):
@@ -109,7 +125,7 @@ def main(resources):
             return
 
         with st.spinner("Retrieving answer..."):
-            print("Started retrieving answer...")
+            logger.info("Started retrieving answer...")
             start = datetime.datetime.now()
 
             dbqa = setup_dbqa(faiss_path, resources["llm"], resources["embeddings_model"])
@@ -117,7 +133,7 @@ def main(resources):
 
             end = datetime.datetime.now()
             delta = (end - start)
-            print(f"Answer retrieved in {delta.seconds}s")
+            logger.info(f"Answer retrieved in {delta.seconds}s")
 
         if response is None or type(response) is not dict or "result" not in response:
             st.error(f"Response is invalid: {response}")
@@ -159,6 +175,8 @@ def download_model_if_necessary():
         if not model_path in MODEL_URLS:
             return f"Model {model_path} is not loaded and does not have a URL assigned."
 
+        logger.info("Downloading model...")
+
         st.write("Downloading the model. This might take a while, do not close or refresh the window.")
         progress_bar = st.progress(0.0, text="Starting download...")
 
@@ -182,9 +200,13 @@ def download_model_if_necessary():
                         text=f"{percent:.1f}% ({format_progress_data(downloaded)}/{format_progress_data(total_length)})"
                     )
 
+        logger.info("Done downloading model.")
+
 
 def process_file(uploaded_file, text_splitter, embeddings_model):
     try:
+        logger.info("Started processing file...")
+
         extension = os.path.splitext(uploaded_file.name)[-1].lower()
         if extension != ".pdf" and extension != ".txt":
             return None, f"File type {extension} not supported. Please upload a '.pdf' or '.txt' file."
@@ -196,6 +218,7 @@ def process_file(uploaded_file, text_splitter, embeddings_model):
         faiss_path = f"{data_path}/faiss"
 
         if os.path.exists(faiss_path):
+            logger.info("Found file in cache.")
             return faiss_path, None
 
         os.mkdir(data_path)
@@ -217,6 +240,8 @@ def process_file(uploaded_file, text_splitter, embeddings_model):
 
         vectorstore = FAISS.from_documents(texts, embeddings_model)
         vectorstore.save_local(faiss_path)
+
+        logger.info("Done processing file.")
 
         return faiss_path, None
 
@@ -258,4 +283,4 @@ def setup_dbqa(faiss_path, llm, embeddings_model):
     return dbqa
 
 
-main(init_resources())
+main()
