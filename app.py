@@ -218,6 +218,7 @@ def process_file(uploaded_file, text_splitter, embeddings_model):
         faiss_path = f"{data_path}/faiss"
 
         if os.path.exists(faiss_path):
+            logger.info("Found file in cache.")
             return faiss_path, None
 
         os.mkdir(data_path)
