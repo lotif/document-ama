@@ -3,8 +3,6 @@ import hashlib
 import os
 import requests
 import shutil
-import shutil
-import traceback
 
 from langchain import PromptTemplate
 from langchain.chains import RetrievalQA
@@ -100,7 +98,6 @@ def main():
         if faiss_path is None and error is not None:
             if type(error) == Exception:
                 st.exception(error)
-                LOGGER.exception(error)
             else:
                 st.error(error)
                 LOGGER.error(error)
@@ -202,7 +199,7 @@ def process_file(uploaded_file, text_splitter, embeddings_model):
 
         extension = os.path.splitext(uploaded_file.name)[-1].lower()
         if extension != ".pdf" and extension != ".txt":
-            return None, f"File type {extension} not supported. Please upload a '.pdf' or '.txt' file."
+            return None, f"File type '{extension}' not supported. Please upload a '.pdf' or '.txt' file."
 
         file_bytes = uploaded_file.read()
         hash = hashlib.sha256(file_bytes).hexdigest()
@@ -240,10 +237,9 @@ def process_file(uploaded_file, text_splitter, embeddings_model):
         return faiss_path, None
 
     except Exception as e:
+        LOGGER.exception("Error processing file.")
         if os.path.exists(data_path):
             shutil.rmtree(data_path)
-
-        print(traceback.format_exc())
         return None, e
 
 
