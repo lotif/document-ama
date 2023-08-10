@@ -1,10 +1,9 @@
 import datetime
 import hashlib
-import logging
 import os
 import requests
 import shutil
-import sys
+import shutil
 import traceback
 
 from langchain import PromptTemplate
@@ -16,14 +15,8 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.vectorstores import FAISS
 import streamlit as st
 
+from logger import LOGGER
 
-logging.basicConfig(
-    format="%(asctime)s %(levelname)-8s %(message)s",
-    stream=sys.stdout,
-    level=logging.INFO,
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
-logger = logging.getLogger(__name__)
 
 CONFIG = {
     "RETURN_SOURCE_DOCUMENTS": True,
@@ -61,7 +54,7 @@ def init_resources():
     resources = {}
 
     with st.spinner("Initializing models..."):
-        logger.info("Initializing models...")
+        LOGGER.info("Initializing models...")
         # Local CTransformers model
         resources["llm"] = CTransformers(
             model=CONFIG["MODEL_BIN_PATH"],
@@ -79,7 +72,7 @@ def init_resources():
             model_name=CONFIG["EMBEDDINGS_MODEL"],
             model_kwargs={"device": "cpu"},
         )
-        logger.info("Done initializing models.")
+        LOGGER.info("Done initializing models.")
 
     return resources
 
@@ -89,7 +82,7 @@ def main():
     error = download_model_if_necessary()
     if error is not None:
         st.error(error)
-        logger.error(error)
+        LOGGER.error(error)
         return None
 
     resources = init_resources()
@@ -107,10 +100,10 @@ def main():
         if faiss_path is None and error is not None:
             if type(error) == Exception:
                 st.exception(error)
-                logger.exception(error)
+                LOGGER.exception(error)
             else:
                 st.error(error)
-                logger.error(error)
+                LOGGER.error(error)
             return
 
     with st.form(key="question_form"):
@@ -125,7 +118,7 @@ def main():
             return
 
         with st.spinner("Retrieving answer..."):
-            logger.info("Started retrieving answer...")
+            LOGGER.info("Started retrieving answer...")
             start = datetime.datetime.now()
 
             dbqa = setup_dbqa(faiss_path, resources["llm"], resources["embeddings_model"])
@@ -133,7 +126,7 @@ def main():
 
             end = datetime.datetime.now()
             delta = (end - start)
-            logger.info(f"Answer retrieved in {delta.seconds}s")
+            LOGGER.info(f"Answer retrieved in {delta.seconds}s")
 
         if response is None or type(response) is not dict or "result" not in response:
             st.error(f"Response is invalid: {response}")
@@ -175,7 +168,7 @@ def download_model_if_necessary():
         if not model_path in MODEL_URLS:
             return f"Model {model_path} is not loaded and does not have a URL assigned."
 
-        logger.info("Downloading model...")
+        LOGGER.info("Downloading model...")
 
         st.write("Downloading the model. This might take a while, do not close or refresh the window.")
         progress_bar = st.progress(0.0, text="Starting download...")
@@ -200,12 +193,12 @@ def download_model_if_necessary():
                         text=f"{percent:.1f}% ({format_progress_data(downloaded)}/{format_progress_data(total_length)})"
                     )
 
-        logger.info("Done downloading model.")
+        LOGGER.info("Done downloading model.")
 
 
 def process_file(uploaded_file, text_splitter, embeddings_model):
     try:
-        logger.info("Started processing file...")
+        LOGGER.info("Started processing file...")
 
         extension = os.path.splitext(uploaded_file.name)[-1].lower()
         if extension != ".pdf" and extension != ".txt":
@@ -218,7 +211,7 @@ def process_file(uploaded_file, text_splitter, embeddings_model):
         faiss_path = f"{data_path}/faiss"
 
         if os.path.exists(faiss_path):
-            logger.info("Found file in cache.")
+            LOGGER.info("Found file in cache.")
             return faiss_path, None
 
         os.mkdir(data_path)
@@ -236,12 +229,13 @@ def process_file(uploaded_file, text_splitter, embeddings_model):
         texts = text_splitter.split_documents(documents)
 
         if len(texts) == 0:
-            raise Exception("Could not extract text from file.")
+            pdf_message = "Please upload a PDF file with selectable text in it." if extension == ".pdf" else ""
+            raise Exception(f"Could not extract text from file. {pdf_message}")
 
         vectorstore = FAISS.from_documents(texts, embeddings_model)
         vectorstore.save_local(faiss_path)
 
-        logger.info("Done processing file.")
+        LOGGER.info("Done processing file.")
 
         return faiss_path, None
 
